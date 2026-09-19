@@ -1129,4 +1129,6 @@ if st.session_state.get("properties_submitted"):
                             "Exact quantities, concentrations, "
                             "temperatures and process times should be "
                             "shown as 'reported values' only when "
-                            "supported by a 
+                             st.info(
+    "Exact quantities, concentrations, temperatures, mixing speeds, mixing times, sieve sizes and compression forces must be labelled as reported values only when supported by a verified research paper."
+)
