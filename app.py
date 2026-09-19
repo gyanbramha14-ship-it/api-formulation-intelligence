@@ -71,55 +71,7 @@ API_DATABASE = {
 st.set_page_config(page_title="API Formulation Intelligence Pro", layout="wide")
 
 # ---------- DRUG DATABASE ----------
-DRUG_DATABASE = {
-    "Paracetamol": {
-        "api_profile": {
-            "Molecular Weight": "151.16 g/mol",
-            "BCS": "Class III",
-            "pKa": "9.5",
-            "LogP": "0.5",
-            "Melting Point": "169-170°C"
-        },
-        "preformulation": [
-            "Solubility study",
-            "Particle size analysis",
-            "Flow properties",
-            "Compressibility",
-            "Compatibility study (FTIR, DSC)"
-        ],
-        "excipients": {
-            "Diluent": "Microcrystalline Cellulose",
-            "Binder": "PVP K30",
-            "Disintegrant": "Sodium Starch Glycolate",
-            "Lubricant": "Magnesium Stearate",
-            "Glidant": "Colloidal Silicon Dioxide"
-        },
-        "procedure": [
-            "API weighing",
-            "Sieving",
-            "Pre-blending",
-            "Lubrication",
-            "Compression",
-            "Evaluation",
-            "Stability study"
-        ],
-        "evaluation": [
-            "Hardness",
-            "Friability",
-            "Disintegration",
-            "Dissolution",
-            "Assay",
-            "Content Uniformity"
-        ],
-        "stability": [
-            "Accelerated stability",
-            "Long-term stability"
-        ],
-        "references": [
-            "PMID:16806756",
-            "PMID:37978101",
-            "PMID:41408804"
-        ]
+DRUG_DATABASE = 
     }
      "Ibuprofen": {
         "api_profile": {
