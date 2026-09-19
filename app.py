@@ -120,7 +120,7 @@ DRUG_DATABASE = {
             "PMID:37978101",
             "PMID:41408804"
         ]
-    },
+    }
      "Ibuprofen": {
         "api_profile": {
             "Molecular Weight": "206.28 g/mol",
