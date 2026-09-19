@@ -121,8 +121,7 @@ DRUG_DATABASE = {
             "PMID:41408804"
         ]
     },
-
-    "Ibuprofen": {
+     "Ibuprofen": {
         "api_profile": {
             "Molecular Weight": "206.28 g/mol",
             "BCS": "Class II",
