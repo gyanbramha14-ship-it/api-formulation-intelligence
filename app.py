@@ -68,7 +68,6 @@ API_DATABASE = {
         ]
     }
 }
-,
 st.set_page_config(page_title="API Formulation Intelligence Pro", layout="wide")
 
 # ---------- DRUG DATABASE ----------
