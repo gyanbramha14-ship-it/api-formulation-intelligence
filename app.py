@@ -161,8 +161,24 @@ DRUG_DATABASE = {
         ]
     }
 
-    # Add remaining 38 drugs in same format.
+    DRUG_DATABASE = {
+    "Paracetamol": {
+        ...
+    },
+
+    "Ibuprofen": {
+        ...
+    },
+
+    "Metformin": {
+        ...
+    },
+
+    "Amlodipine": {
+        ...
+    }
 }
+
 
 # ---------- UI ----------
 st.title("🧪 API Formulation Intelligence Pro")
