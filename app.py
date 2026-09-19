@@ -68,6 +68,327 @@ API_DATABASE = {
         ]
     }
 }
+,
+st.set_page_config(page_title="API Formulation Intelligence Pro", layout="wide")
+
+# ---------- DRUG DATABASE ----------
+DRUG_DATABASE = {
+    "Paracetamol": {
+        "api_profile": {
+            "Molecular Weight": "151.16 g/mol",
+            "BCS": "Class III",
+            "pKa": "9.5",
+            "LogP": "0.5",
+            "Melting Point": "169-170°C"
+        },
+        "preformulation": [
+            "Solubility study",
+            "Particle size analysis",
+            "Flow properties",
+            "Compressibility",
+            "Compatibility study (FTIR, DSC)"
+        ],
+        "excipients": {
+            "Diluent": "Microcrystalline Cellulose",
+            "Binder": "PVP K30",
+            "Disintegrant": "Sodium Starch Glycolate",
+            "Lubricant": "Magnesium Stearate",
+            "Glidant": "Colloidal Silicon Dioxide"
+        },
+        "procedure": [
+            "API weighing",
+            "Sieving",
+            "Pre-blending",
+            "Lubrication",
+            "Compression",
+            "Evaluation",
+            "Stability study"
+        ],
+        "evaluation": [
+            "Hardness",
+            "Friability",
+            "Disintegration",
+            "Dissolution",
+            "Assay",
+            "Content Uniformity"
+        ],
+        "stability": [
+            "Accelerated stability",
+            "Long-term stability"
+        ],
+        "references": [
+            "PMID:16806756",
+            "PMID:37978101",
+            "PMID:41408804"
+        ]
+    },
+
+    "Ibuprofen": {
+        "api_profile": {
+            "Molecular Weight": "206.28 g/mol",
+            "BCS": "Class II",
+            "pKa": "4.4",
+            "LogP": "3.5"
+        },
+        "preformulation": [
+            "Solubility vs pH",
+            "Particle size",
+            "Compatibility"
+        ],
+        "excipients": {
+            "Diluent": "Lactose",
+            "Binder": "PVP K30",
+            "Disintegrant": "Crospovidone",
+            "Lubricant": "Magnesium Stearate",
+            "Glidant": "Aerosil"
+        },
+        "procedure": [
+            "API characterization",
+            "Blending",
+            "Compression",
+            "Dissolution",
+            "Stability"
+        ],
+        "evaluation": [
+            "Hardness",
+            "Dissolution",
+            "Assay"
+        ],
+        "stability": [
+            "Accelerated stability"
+        ],
+        "references": [
+            "PMID:23614647"
+        ]
+    }
+
+    # Add remaining 38 drugs in same format.
+}
+
+# ---------- UI ----------
+st.title("🧪 API Formulation Intelligence Pro")
+
+drug = st.selectbox("Select API", list(DRUG_DATABASE.keys()))
+
+if st.button("Analyze API"):
+    d = DRUG_DATABASE[drug]
+
+    st.header("1. API Profile")
+    st.json(d["api_profile"])
+
+    st.header("2. Preformulation Studies")
+    for item in d["preformulation"]:
+        st.write("•", item)
+
+    st.header("3. Excipients Used")
+    st.json(d["excipients"])
+
+    st.header("4. Manufacturing Procedure")
+    for i, step in enumerate(d["procedure"], 1):
+        st.write(f"{i}. {step}")
+
+    st.header("5. Evaluation Tests")
+    for t in d["evaluation"]:
+        st.write("•", t)
+
+    st.header("6. Stability Studies")
+    for s in d["stability"]:
+        st.write("•", s)
+
+    st.header("7. Literature References")
+    for r in d["references"]:
+        st.write("•", r)
+"Metformin": {
+    "api_profile":{"MW":"129.16 g/mol","BCS":"Class III","pKa":"12.4","LogP":"-1.4"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP K30","Disintegrant":"Crospovidone","Lubricant":"Magnesium Stearate","Glidant":"Aerosil"},
+    "procedure":["Weighing","Sieving","Blending","Compression","Evaluation","Stability"]
+},
+
+"Amlodipine": {
+    "api_profile":{"MW":"408.9 g/mol","BCS":"Class I","pKa":"8.6","LogP":"2.1"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Magnesium Stearate","Glidant":"Talc"},
+    "procedure":["Weighing","Blending","Compression","Evaluation","Stability"]
+},
+
+"Diclofenac Sodium": {
+    "api_profile":{"MW":"318.1 g/mol","BCS":"Class II","pKa":"4.0","LogP":"4.5"},
+    "excipients":{"Diluent":"MCC","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["API study","Blending","Compression","Dissolution","Stability"]
+},
+
+"Aspirin": {
+    "api_profile":{"MW":"180.16 g/mol","BCS":"Class I","pKa":"3.5","LogP":"1.2"},
+    "excipients":{"Diluent":"Starch","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
+    "procedure":["Weighing","Granulation","Drying","Compression","Evaluation"]
+},
+
+"Atorvastatin": {
+    "api_profile":{"MW":"558.6 g/mol","BCS":"Class II","pKa":"4.5","LogP":"6.3"},
+    "excipients":{"Diluent":"Lactose","Binder":"HPMC","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["API characterization","Wet granulation","Compression","Evaluation"]
+},
+
+"Rosuvastatin": {
+    "api_profile":{"MW":"481.5 g/mol","BCS":"Class III","pKa":"4.6","LogP":"0.1"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Aerosil"},
+    "procedure":["Blending","Compression","Evaluation","Stability"]
+},
+
+"Losartan": {
+    "api_profile":{"MW":"422.9 g/mol","BCS":"Class III","pKa":"4.0","LogP":"4.0"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Weighing","Blending","Compression","Evaluation"]
+},
+
+"Telmisartan": {
+    "api_profile":{"MW":"514.6 g/mol","BCS":"Class II","pKa":"4.5","LogP":"7.7"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Particle size reduction","Blending","Compression","Evaluation"]
+},
+
+"Valsartan": {
+    "api_profile":{"MW":"435.5 g/mol","BCS":"Class III","pKa":"4.9","LogP":"1.5"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Atenolol": {
+    "api_profile":{"MW":"266.3 g/mol","BCS":"Class III","pKa":"9.6","LogP":"0.2"},
+    "excipients":{"Diluent":"MCC","Binder":"Starch Paste","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
+    "procedure":["Granulation","Compression","Evaluation"]
+},
+
+"Propranolol": {
+    "api_profile":{"MW":"259.3 g/mol","BCS":"Class I","pKa":"9.5","LogP":"3.5"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Carvedilol": {
+    "api_profile":{"MW":"406.5 g/mol","BCS":"Class II","pKa":"7.8","LogP":"3.8"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Wet granulation","Compression","Evaluation"]
+},
+
+"Amoxicillin": {
+    "api_profile":{"MW":"365.4 g/mol","BCS":"Class III","pKa":"2.8","LogP":"-0.8"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Cefixime": {
+    "api_profile":{"MW":"453.5 g/mol","BCS":"Class IV","pKa":"2.5","LogP":"0.4"},
+    "excipients":{"Diluent":"Lactose","Binder":"HPMC","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Wet granulation","Compression","Evaluation"]
+},
+
+"Ciprofloxacin": {
+    "api_profile":{"MW":"331.3 g/mol","BCS":"Class III","pKa":"6.1","LogP":"0.3"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Azithromycin": {
+    "api_profile":{"MW":"749 g/mol","BCS":"Class III","pKa":"8.7","LogP":"4.0"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Granulation","Compression","Evaluation"]
+},
+
+"Doxycycline": {
+    "api_profile":{"MW":"444.4 g/mol","BCS":"Class I","pKa":"3.0","LogP":"-0.2"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Capsule filling","Evaluation"]
+},
+
+"Omeprazole": {
+    "api_profile":{"MW":"345.4 g/mol","BCS":"Class II","pKa":"4.0","LogP":"2.2"},
+    "excipients":{"Diluent":"Mannitol","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Pellet coating","Capsule filling","Evaluation"]
+},
+
+"Pantoprazole": {
+    "api_profile":{"MW":"383.4 g/mol","BCS":"Class III","pKa":"3.8","LogP":"2.0"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Enteric coating","Compression","Evaluation"]
+},
+
+"Rabeprazole": {
+    "api_profile":{"MW":"359.4 g/mol","BCS":"Class III","pKa":"5.0","LogP":"2.5"},
+    "excipients":{"Diluent":"Mannitol","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Enteric tablet","Evaluation"]
+},
+
+"Cetirizine": {
+    "api_profile":{"MW":"388.9 g/mol","BCS":"Class III","pKa":"2.2","LogP":"2.9"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Levocetirizine": {
+    "api_profile":{"MW":"388.9 g/mol","BCS":"Class III","pKa":"2.1","LogP":"2.8"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Compression","Evaluation"]
+},
+
+"Loratadine": {
+    "api_profile":{"MW":"382.9 g/mol","BCS":"Class II","pKa":"5.0","LogP":"5.2"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Blending","Compression","Evaluation"]
+},
+
+"Fexofenadine": {
+    "api_profile":{"MW":"501.7 g/mol","BCS":"Class III","pKa":"4.3","LogP":"0.5"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Compression","Evaluation"]
+},
+
+"Salbutamol": {
+    "api_profile":{"MW":"239.3 g/mol","BCS":"Class I","pKa":"9.2","LogP":"1.3"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet preparation","Evaluation"]
+},
+
+"Theophylline": {
+    "api_profile":{"MW":"180.2 g/mol","BCS":"Class I","pKa":"8.6","LogP":"-0.1"},
+    "excipients":{"Diluent":"MCC","Binder":"HPMC","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["SR tablet formulation","Evaluation"]
+},
+
+"Montelukast": {
+    "api_profile":{"MW":"586.2 g/mol","BCS":"Class II","pKa":"5.7","LogP":"8.8"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Compression","Evaluation"]
+},
+
+"Fluconazole": {
+    "api_profile":{"MW":"306.3 g/mol","BCS":"Class I","pKa":"1.8","LogP":"0.5"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet formulation","Evaluation"]
+},
+
+"Ketoconazole": {
+    "api_profile":{"MW":"531.4 g/mol","BCS":"Class II","pKa":"6.5","LogP":"4.3"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet formulation","Evaluation"]
+},
+
+"Clotrimazole": {
+    "api_profile":{"MW":"344.8 g/mol","BCS":"Class II","pKa":"6.0","LogP":"6.1"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet/Cream formulation","Evaluation"]
+},
+
+"Albendazole": {
+    "api_profile":{"MW":"265.3 g/mol","BCS":"Class II","pKa":"2.8","LogP":"3.2"},
+    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet formulation","Evaluation"]
+},
+
+"Mebendazole": {
+    "api_profile":{"MW":"295.3 g/mol","BCS":"Class II","pKa":"3.0","LogP":"2.9"},
+    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
+    "procedure":["Tablet formulation","Evaluation"]
+}
 
 
 # ============================================================
