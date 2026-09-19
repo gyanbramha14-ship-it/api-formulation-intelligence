@@ -71,9 +71,46 @@ API_DATABASE = {
 st.set_page_config(page_title="API Formulation Intelligence Pro", layout="wide")
 
 # ---------- DRUG DATABASE ----------
-DRUG_DATABASE = 
-    }
-     "Ibuprofen": {
+DRUG_DATABASE = {
+    "Paracetamol": {
+        "api_profile": {
+            "Molecular Weight": "151.16 g/mol",
+            "BCS": "Class III",
+            "pKa": "9.5",
+            "LogP": "0.5"
+        },
+        "preformulation": [
+            "Solubility study",
+            "Particle size analysis",
+            "Flow properties",
+            "Compressibility",
+            "Compatibility study (FTIR, DSC)"
+        ],
+        "excipients": {
+            "Diluent": "Microcrystalline Cellulose",
+            "Binder": "PVP K30",
+            "Disintegrant": "Sodium Starch Glycolate",
+            "Lubricant": "Magnesium Stearate",
+            "Glidant": "Colloidal Silicon Dioxide"
+        },
+        "procedure": [
+            "API Weighing",
+            "Sieving",
+            "Pre-blending",
+            "Lubrication",
+            "Compression",
+            "Evaluation",
+            "Stability Study"
+        ],
+        "evaluation": [
+            "Hardness", "Friability", "Disintegration",
+            "Dissolution", "Assay", "Content Uniformity"
+        ],
+        "stability": ["Accelerated Stability", "Long-term Stability"],
+        "references": ["PMID:16806756", "PMID:37978101", "PMID:41408804"]
+    },
+
+    "Ibuprofen": {
         "api_profile": {
             "Molecular Weight": "206.28 g/mol",
             "BCS": "Class II",
@@ -82,7 +119,7 @@ DRUG_DATABASE =
         },
         "preformulation": [
             "Solubility vs pH",
-            "Particle size",
+            "Particle Size",
             "Compatibility"
         ],
         "excipients": {
@@ -93,45 +130,86 @@ DRUG_DATABASE =
             "Glidant": "Aerosil"
         },
         "procedure": [
-            "API characterization",
+            "API Characterization",
             "Blending",
             "Compression",
             "Dissolution",
             "Stability"
         ],
         "evaluation": [
-            "Hardness",
-            "Dissolution",
-            "Assay"
+            "Hardness", "Dissolution", "Assay"
         ],
-        "stability": [
-            "Accelerated stability"
-        ],
-        "references": [
-            "PMID:23614647"
-        ]
-    }
-
-    DRUG_DATABASE = {
-    "Paracetamol": {
-        ...
-    },
-
-    "Ibuprofen": {
-        ...
+        "stability": ["Accelerated Stability"],
+        "references": ["PMID:23614647"]
     },
 
     "Metformin": {
-        ...
+        "api_profile": {
+            "Molecular Weight": "129.16 g/mol",
+            "BCS": "Class III",
+            "pKa": "12.4",
+            "LogP": "-1.4"
+        },
+        "preformulation": [
+            "Solubility Study",
+            "Particle Size",
+            "Flow Properties"
+        ],
+        "excipients": {
+            "Diluent": "MCC",
+            "Binder": "PVP K30",
+            "Disintegrant": "Crospovidone",
+            "Lubricant": "Magnesium Stearate",
+            "Glidant": "Aerosil"
+        },
+        "procedure": [
+            "Weighing",
+            "Sieving",
+            "Blending",
+            "Compression",
+            "Evaluation",
+            "Stability"
+        ],
+        "evaluation": [
+            "Hardness", "Dissolution", "Assay"
+        ],
+        "stability": ["Accelerated Stability"],
+        "references": ["PMID:23783995"]
     },
 
     "Amlodipine": {
-        ...
+        "api_profile": {
+            "Molecular Weight": "408.9 g/mol",
+            "BCS": "Class I",
+            "pKa": "8.6",
+            "LogP": "2.1"
+        },
+        "preformulation": [
+            "Compatibility Study",
+            "Particle Size",
+            "Flow Study"
+        ],
+        "excipients": {
+            "Diluent": "Lactose",
+            "Binder": "PVP",
+            "Disintegrant": "SSG",
+            "Lubricant": "Magnesium Stearate",
+            "Glidant": "Talc"
+        },
+        "procedure": [
+            "Weighing",
+            "Blending",
+            "Compression",
+            "Evaluation",
+            "Stability"
+        ],
+        "evaluation": [
+            "Hardness", "Dissolution", "Assay"
+        ],
+        "stability": ["Accelerated Stability"],
+        "references": ["PMID:19731558"]
     }
-}
-
-
-# ---------- UI ----------
+}#---------- UI ----------
 st.title("🧪 API Formulation Intelligence Pro")
 
 drug = st.selectbox("Select API", list(DRUG_DATABASE.keys()))
