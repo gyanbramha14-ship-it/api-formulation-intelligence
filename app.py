@@ -1,1178 +1,2233 @@
-import streamlit as st
-import requests
+import re
 from urllib.parse import quote
 
+import pandas as pd
+import requests
+import streamlit as st
+from bs4 import BeautifulSoup
+
+
 st.set_page_config(
-    page_title="API → Formulation Intelligence",
-    page_icon="🧪",
-    layout="wide"
+    page_title="PharmaLens 100",
+    page_icon="💊",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# EVIDENCE SOURCES
-# ============================================================
 
-SOURCES = [
+# ----------------------------
+# UI styling
+# ----------------------------
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: #f4f7fb;
+    }
+
+    .block-container {
+        max-width: 1450px;
+        padding-top: 1.5rem;
+    }
+
+    .hero {
+        padding: 30px;
+        border-radius: 24px;
+        color: white;
+        background: linear-gradient(135deg, #075985, #0f766e);
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+        margin-bottom: 18px;
+    }
+
+    .hero h1 {
+        color: white;
+        font-size: 2.5rem;
+        margin-bottom: 6px;
+    }
+
+    .hero p {
+        color: #e0f2fe;
+        font-size: 1.08rem;
+        margin: 0;
+    }
+
+    .notice {
+        background: #fff7ed;
+        color: #7c2d12;
+        border-left: 6px solid #f97316;
+        border-radius: 12px;
+        padding: 14px;
+        margin: 12px 0;
+    }
+
+    .success-box {
+        background: #ecfdf5;
+        color: #064e3b;
+        border-left: 6px solid #059669;
+        border-radius: 12px;
+        padding: 14px;
+        margin: 12px 0;
+    }
+
+    div[data-testid="stMetric"] {
+        background: white;
+        border-radius: 15px;
+        padding: 12px;
+        box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+    }
+
+    div[data-testid="stExpander"] {
+        border-radius: 14px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ----------------------------
+# 100-drug database
+# ----------------------------
+
+DRUGS = [
     {
-        "title": "ICH Q8(R2) Pharmaceutical Development",
-        "url": "https://www.ema.europa.eu/en/ich-q8-r2-pharmaceutical-development-scientific-guideline",
-        "type": "Regulatory / ICH"
+        "name": "Paracetamol",
+        "class": "Analgesic / Antipyretic",
+        "forms": ["Tablet", "Capsule", "Syrup", "Suspension", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Pain and fever",
+        "solubility": "Moderately soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture and excessive heat"
     },
     {
-        "title": "FDA Inactive Ingredient Database",
-        "url": "https://www.fda.gov/drugs/drug-approvals-and-databases/inactive-ingredients-database-download",
-        "type": "Regulatory / Excipient"
+        "name": "Ibuprofen",
+        "class": "NSAID",
+        "forms": ["Tablet", "Capsule", "Suspension", "Gel"],
+        "routes": ["Oral", "Topical"],
+        "uses": "Pain, inflammation and fever",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture and light"
     },
     {
-        "title": "FDA Dissolution Resources",
-        "url": "https://www.fda.gov/animal-veterinary/new-animal-drug-applications/compilation-fda-guidance-and-resources-in-vitro-dissolution-testing-immediate-release-solid-oral-dosage",
-        "type": "Regulatory / Dissolution"
+        "name": "Aspirin",
+        "class": "NSAID / Antiplatelet",
+        "forms": ["Tablet", "Chewable Tablet"],
+        "routes": ["Oral"],
+        "uses": "Pain, fever and antiplatelet therapy",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Moisture sensitive; hydrolysis may occur"
+    },
+    {
+        "name": "Naproxen",
+        "class": "NSAID",
+        "forms": ["Tablet", "Capsule", "Suspension"],
+        "routes": ["Oral"],
+        "uses": "Pain and inflammation",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Diclofenac",
+        "class": "NSAID",
+        "forms": ["Tablet", "Capsule", "Gel", "Injection", "Suppository"],
+        "routes": ["Oral", "Topical", "Intramuscular", "Rectal"],
+        "uses": "Pain and inflammation",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture and light"
+    },
+    {
+        "name": "Ketoprofen",
+        "class": "NSAID",
+        "forms": ["Capsule", "Tablet", "Gel"],
+        "routes": ["Oral", "Topical"],
+        "uses": "Pain and inflammation",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Amoxicillin",
+        "class": "Penicillin Antibiotic",
+        "forms": ["Tablet", "Capsule", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from moisture and excessive heat"
+    },
+    {
+        "name": "Azithromycin",
+        "class": "Macrolide Antibiotic",
+        "forms": ["Tablet", "Capsule", "Oral Suspension", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Clarithromycin",
+        "class": "Macrolide Antibiotic",
+        "forms": ["Tablet", "Extended-Release Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ciprofloxacin",
+        "class": "Fluoroquinolone Antibiotic",
+        "forms": ["Tablet", "Oral Suspension", "Eye Drops", "Injection"],
+        "routes": ["Oral", "Ophthalmic", "Intravenous"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Levofloxacin",
+        "class": "Fluoroquinolone Antibiotic",
+        "forms": ["Tablet", "Eye Drops", "Injection"],
+        "routes": ["Oral", "Ophthalmic", "Intravenous"],
+        "uses": "Bacterial infections",
+        "solubility": "Soluble in acidic conditions",
+        "dose_type": "Medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Moxifloxacin",
+        "class": "Fluoroquinolone Antibiotic",
+        "forms": ["Tablet", "Eye Drops", "Injection"],
+        "routes": ["Oral", "Ophthalmic", "Intravenous"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Doxycycline",
+        "class": "Tetracycline Antibiotic",
+        "forms": ["Tablet", "Capsule"],
+        "routes": ["Oral"],
+        "uses": "Bacterial infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low to medium dose",
+        "stability": "Protect from moisture and light"
+    },
+    {
+        "name": "Metronidazole",
+        "class": "Antibacterial / Antiprotozoal",
+        "forms": ["Tablet", "Suspension", "Gel", "Injection"],
+        "routes": ["Oral", "Topical", "Intravenous"],
+        "uses": "Anaerobic and protozoal infections",
+        "solubility": "Sparingly soluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Tinidazole",
+        "class": "Antiprotozoal",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Protozoal and anaerobic infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Cefixime",
+        "class": "Cephalosporin Antibiotic",
+        "forms": ["Tablet", "Capsule", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Bacterial infections",
+        "solubility": "Poorly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Cephalexin",
+        "class": "Cephalosporin Antibiotic",
+        "forms": ["Capsule", "Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Bacterial infections",
+        "solubility": "Soluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Cefuroxime",
+        "class": "Cephalosporin Antibiotic",
+        "forms": ["Tablet", "Oral Suspension", "Injection"],
+        "routes": ["Oral", "Intravenous", "Intramuscular"],
+        "uses": "Bacterial infections",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ceftriaxone",
+        "class": "Cephalosporin Antibiotic",
+        "forms": ["Injection"],
+        "routes": ["Intravenous", "Intramuscular"],
+        "uses": "Serious bacterial infections",
+        "solubility": "Soluble in water",
+        "dose_type": "High dose",
+        "stability": "Sterile product; protect from light"
+    },
+    {
+        "name": "Meropenem",
+        "class": "Carbapenem Antibiotic",
+        "forms": ["Injection"],
+        "routes": ["Intravenous"],
+        "uses": "Serious bacterial infections",
+        "solubility": "Soluble depending on formulation",
+        "dose_type": "High dose",
+        "stability": "Sterile and temperature-controlled handling"
+    },
+    {
+        "name": "Pantoprazole",
+        "class": "Proton Pump Inhibitor",
+        "forms": ["Delayed-Release Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Acid-related disorders",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Acid sensitive; enteric protection may be required"
+    },
+    {
+        "name": "Omeprazole",
+        "class": "Proton Pump Inhibitor",
+        "forms": ["Delayed-Release Capsule", "Delayed-Release Tablet"],
+        "routes": ["Oral"],
+        "uses": "Acid-related disorders",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Acid and moisture sensitive"
+    },
+    {
+        "name": "Esomeprazole",
+        "class": "Proton Pump Inhibitor",
+        "forms": ["Delayed-Release Tablet", "Delayed-Release Capsule", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Acid-related disorders",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Acid sensitive"
+    },
+    {
+        "name": "Rabeprazole",
+        "class": "Proton Pump Inhibitor",
+        "forms": ["Delayed-Release Tablet"],
+        "routes": ["Oral"],
+        "uses": "Acid-related disorders",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Acid and moisture sensitive"
+    },
+    {
+        "name": "Famotidine",
+        "class": "H2-Receptor Antagonist",
+        "forms": ["Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Acid-related disorders",
+        "solubility": "Freely soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ondansetron",
+        "class": "Antiemetic",
+        "forms": ["Tablet", "Orally Disintegrating Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Nausea and vomiting",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Domperidone",
+        "class": "Gastroprokinetic / Antiemetic",
+        "forms": ["Tablet", "Suspension"],
+        "routes": ["Oral"],
+        "uses": "Nausea and gastric motility disorders",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Metoclopramide",
+        "class": "Antiemetic / Gastroprokinetic",
+        "forms": ["Tablet", "Injection", "Oral Solution"],
+        "routes": ["Oral", "Intravenous", "Intramuscular"],
+        "uses": "Nausea and vomiting",
+        "solubility": "Soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Loperamide",
+        "class": "Antidiarrheal",
+        "forms": ["Capsule", "Tablet", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Diarrhea",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Lactulose",
+        "class": "Osmotic Laxative",
+        "forms": ["Oral Solution", "Syrup"],
+        "routes": ["Oral"],
+        "uses": "Constipation and hepatic encephalopathy",
+        "solubility": "Freely soluble in water",
+        "dose_type": "High volume liquid dose",
+        "stability": "Protect from excessive heat"
+    },
+    {
+        "name": "Metformin",
+        "class": "Biguanide Antidiabetic",
+        "forms": ["Tablet", "Extended-Release Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Freely soluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Glimepiride",
+        "class": "Sulfonylurea Antidiabetic",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from moisture and light"
+    },
+    {
+        "name": "Gliclazide",
+        "class": "Sulfonylurea Antidiabetic",
+        "forms": ["Tablet", "Modified-Release Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Sitagliptin",
+        "class": "DPP-4 Inhibitor",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Vildagliptin",
+        "class": "DPP-4 Inhibitor",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Dapagliflozin",
+        "class": "SGLT2 Inhibitor",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Diabetes and selected cardiovascular or renal conditions",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Empagliflozin",
+        "class": "SGLT2 Inhibitor",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Diabetes and selected cardiovascular or renal conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Pioglitazone",
+        "class": "Thiazolidinedione",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Type 2 diabetes",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Levothyroxine",
+        "class": "Thyroid Hormone",
+        "forms": ["Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Hypothyroidism",
+        "solubility": "Very slightly soluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Sensitive to light and moisture"
+    },
+    {
+        "name": "Amlodipine",
+        "class": "Calcium Channel Blocker",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Hypertension and angina",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Atenolol",
+        "class": "Beta Blocker",
+        "forms": ["Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Hypertension and cardiovascular conditions",
+        "solubility": "Soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Metoprolol",
+        "class": "Beta Blocker",
+        "forms": ["Tablet", "Extended-Release Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Hypertension and cardiovascular conditions",
+        "solubility": "Soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Losartan",
+        "class": "Angiotensin Receptor Blocker",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Hypertension",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Telmisartan",
+        "class": "Angiotensin Receptor Blocker",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Hypertension",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Valsartan",
+        "class": "Angiotensin Receptor Blocker",
+        "forms": ["Tablet", "Capsule"],
+        "routes": ["Oral"],
+        "uses": "Hypertension and cardiovascular conditions",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Enalapril",
+        "class": "ACE Inhibitor",
+        "forms": ["Tablet", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Hypertension and heart failure",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ramipril",
+        "class": "ACE Inhibitor",
+        "forms": ["Capsule", "Tablet"],
+        "routes": ["Oral"],
+        "uses": "Hypertension and cardiovascular conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Furosemide",
+        "class": "Loop Diuretic",
+        "forms": ["Tablet", "Oral Solution", "Injection"],
+        "routes": ["Oral", "Intravenous", "Intramuscular"],
+        "uses": "Edema and hypertension",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low to medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Hydrochlorothiazide",
+        "class": "Thiazide Diuretic",
+        "forms": ["Tablet", "Capsule"],
+        "routes": ["Oral"],
+        "uses": "Hypertension and edema",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Spironolactone",
+        "class": "Potassium-Sparing Diuretic",
+        "forms": ["Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Edema and selected cardiovascular conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Atorvastatin",
+        "class": "Statin",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Dyslipidemia",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light and moisture"
+    },
+    {
+        "name": "Rosuvastatin",
+        "class": "Statin",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Dyslipidemia",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Simvastatin",
+        "class": "Statin",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Dyslipidemia",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Clopidogrel",
+        "class": "Antiplatelet",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Prevention of thrombotic cardiovascular events",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Warfarin",
+        "class": "Anticoagulant",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Prevention and treatment of thrombosis",
+        "solubility": "Slightly soluble depending on salt form",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light and moisture"
+    },
+    {
+        "name": "Rivaroxaban",
+        "class": "Direct Oral Anticoagulant",
+        "forms": ["Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Prevention and treatment of thrombosis",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Apixaban",
+        "class": "Direct Oral Anticoagulant",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Prevention and treatment of thrombosis",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Nitroglycerin",
+        "class": "Nitrate",
+        "forms": ["Sublingual Tablet", "Transdermal Patch", "Sublingual Spray"],
+        "routes": ["Sublingual", "Transdermal"],
+        "uses": "Angina",
+        "solubility": "Soluble in organic solvents",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light and heat"
+    },
+    {
+        "name": "Salbutamol",
+        "class": "Bronchodilator",
+        "forms": ["Tablet", "Syrup", "Inhaler", "Nebulizer Solution"],
+        "routes": ["Oral", "Inhalation"],
+        "uses": "Bronchospasm and asthma",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Budesonide",
+        "class": "Corticosteroid",
+        "forms": ["Inhaler", "Nebulizer Suspension", "Capsule"],
+        "routes": ["Inhalation", "Oral"],
+        "uses": "Respiratory and inflammatory conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light and moisture"
+    },
+    {
+        "name": "Beclomethasone",
+        "class": "Corticosteroid",
+        "forms": ["Inhaler", "Nasal Spray"],
+        "routes": ["Inhalation", "Nasal"],
+        "uses": "Respiratory and allergic conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Montelukast",
+        "class": "Leukotriene Receptor Antagonist",
+        "forms": ["Tablet", "Chewable Tablet", "Granules"],
+        "routes": ["Oral"],
+        "uses": "Asthma and allergic rhinitis",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Theophylline",
+        "class": "Methylxanthine Bronchodilator",
+        "forms": ["Tablet", "Extended-Release Tablet", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Respiratory conditions",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Cetirizine",
+        "class": "Antihistamine",
+        "forms": ["Tablet", "Syrup", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Allergic conditions",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Levocetirizine",
+        "class": "Antihistamine",
+        "forms": ["Tablet", "Syrup"],
+        "routes": ["Oral"],
+        "uses": "Allergic conditions",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Loratadine",
+        "class": "Antihistamine",
+        "forms": ["Tablet", "Syrup"],
+        "routes": ["Oral"],
+        "uses": "Allergic conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Fexofenadine",
+        "class": "Antihistamine",
+        "forms": ["Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Allergic conditions",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Dextromethorphan",
+        "class": "Antitussive",
+        "forms": ["Syrup", "Lozenge", "Capsule"],
+        "routes": ["Oral"],
+        "uses": "Cough suppression",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Guaifenesin",
+        "class": "Expectorant",
+        "forms": ["Syrup", "Tablet", "Extended-Release Tablet"],
+        "routes": ["Oral"],
+        "uses": "Productive cough",
+        "solubility": "Soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ambroxol",
+        "class": "Mucolytic",
+        "forms": ["Tablet", "Syrup", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Mucus-related respiratory conditions",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Bromhexine",
+        "class": "Mucolytic",
+        "forms": ["Tablet", "Syrup", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Mucus-related respiratory conditions",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Mupirocin",
+        "class": "Topical Antibiotic",
+        "forms": ["Cream", "Ointment"],
+        "routes": ["Topical"],
+        "uses": "Local bacterial skin infections",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from heat"
+    },
+    {
+        "name": "Clotrimazole",
+        "class": "Antifungal",
+        "forms": ["Cream", "Lotion", "Vaginal Tablet"],
+        "routes": ["Topical", "Vaginal"],
+        "uses": "Fungal infections",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ketoconazole",
+        "class": "Antifungal",
+        "forms": ["Cream", "Shampoo", "Tablet"],
+        "routes": ["Topical", "Oral"],
+        "uses": "Fungal infections",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Fluconazole",
+        "class": "Triazole Antifungal",
+        "forms": ["Tablet", "Capsule", "Oral Suspension", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Fungal infections",
+        "solubility": "Soluble in water",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Acyclovir",
+        "class": "Antiviral",
+        "forms": ["Tablet", "Cream", "Ointment", "Injection"],
+        "routes": ["Oral", "Topical", "Intravenous"],
+        "uses": "Herpes virus infections",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Medium to high dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Oseltamivir",
+        "class": "Antiviral",
+        "forms": ["Capsule", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Influenza",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Hydrocortisone",
+        "class": "Corticosteroid",
+        "forms": ["Cream", "Ointment", "Tablet", "Injection"],
+        "routes": ["Topical", "Oral", "Intravenous"],
+        "uses": "Inflammatory and allergic conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Betamethasone",
+        "class": "Corticosteroid",
+        "forms": ["Cream", "Ointment", "Tablet", "Injection"],
+        "routes": ["Topical", "Oral", "Intramuscular"],
+        "uses": "Inflammatory and allergic conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Adapalene",
+        "class": "Topical Retinoid",
+        "forms": ["Gel", "Cream"],
+        "routes": ["Topical"],
+        "uses": "Acne",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Tretinoin",
+        "class": "Topical Retinoid",
+        "forms": ["Cream", "Gel", "Lotion"],
+        "routes": ["Topical"],
+        "uses": "Acne and selected dermatological conditions",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Povidone Iodine",
+        "class": "Antiseptic",
+        "forms": ["Solution", "Ointment", "Gargle"],
+        "routes": ["Topical", "Oral cavity"],
+        "uses": "Antisepsis",
+        "solubility": "Soluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Chlorhexidine",
+        "class": "Antiseptic",
+        "forms": ["Solution", "Gel", "Mouthwash"],
+        "routes": ["Topical", "Oral cavity"],
+        "uses": "Antisepsis and oral hygiene",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Topical",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Silver Sulfadiazine",
+        "class": "Topical Antimicrobial",
+        "forms": ["Cream"],
+        "routes": ["Topical"],
+        "uses": "Burn wound infection prevention",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Calamine",
+        "class": "Topical Protective",
+        "forms": ["Lotion", "Cream"],
+        "routes": ["Topical"],
+        "uses": "Skin irritation and itching",
+        "solubility": "Insoluble in water",
+        "dose_type": "Topical",
+        "stability": "Protect from contamination"
+    },
+    {
+        "name": "Lidocaine",
+        "class": "Local Anesthetic",
+        "forms": ["Gel", "Cream", "Injection", "Spray"],
+        "routes": ["Topical", "Local", "Intravenous"],
+        "uses": "Local anesthesia",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low to medium dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Bupivacaine",
+        "class": "Local Anesthetic",
+        "forms": ["Injection"],
+        "routes": ["Local", "Epidural"],
+        "uses": "Local and regional anesthesia",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Sterile product; protect from light"
+    },
+    {
+        "name": "Tramadol",
+        "class": "Opioid Analgesic",
+        "forms": ["Tablet", "Capsule", "Oral Drops", "Injection"],
+        "routes": ["Oral", "Intravenous", "Intramuscular"],
+        "uses": "Moderate pain",
+        "solubility": "Soluble depending on salt form",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Gabapentin",
+        "class": "Anticonvulsant / Neuropathic Pain Agent",
+        "forms": ["Capsule", "Tablet", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Neuropathic pain and seizure disorders",
+        "solubility": "Freely soluble in water",
+        "dose_type": "Medium to high dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Pregabalin",
+        "class": "Anticonvulsant / Neuropathic Pain Agent",
+        "forms": ["Capsule", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Neuropathic pain and seizure disorders",
+        "solubility": "Freely soluble in water",
+        "dose_type": "Low to medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Ferrous Sulfate",
+        "class": "Hematinic",
+        "forms": ["Tablet", "Capsule", "Syrup"],
+        "routes": ["Oral"],
+        "uses": "Iron deficiency",
+        "solubility": "Soluble depending on hydrate and medium",
+        "dose_type": "Medium dose",
+        "stability": "Protect from moisture and oxidation"
+    },
+    {
+        "name": "Folic Acid",
+        "class": "Vitamin",
+        "forms": ["Tablet", "Oral Solution"],
+        "routes": ["Oral"],
+        "uses": "Folate deficiency",
+        "solubility": "Slightly soluble in water",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Calcium Carbonate",
+        "class": "Mineral Supplement / Antacid",
+        "forms": ["Tablet", "Chewable Tablet", "Suspension"],
+        "routes": ["Oral"],
+        "uses": "Calcium supplementation and antacid use",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "High dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Vitamin D3",
+        "class": "Vitamin",
+        "forms": ["Tablet", "Capsule", "Oral Drops"],
+        "routes": ["Oral"],
+        "uses": "Vitamin D supplementation",
+        "solubility": "Fat soluble",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light and oxidation"
+    },
+    {
+        "name": "Vitamin B12",
+        "class": "Vitamin",
+        "forms": ["Tablet", "Injection", "Oral Solution"],
+        "routes": ["Oral", "Intramuscular"],
+        "uses": "Vitamin B12 supplementation",
+        "solubility": "Soluble depending on form",
+        "dose_type": "Very low dose",
+        "stability": "Protect from light"
+    },
+    {
+        "name": "Zinc Sulfate",
+        "class": "Mineral Supplement",
+        "forms": ["Tablet", "Capsule", "Syrup"],
+        "routes": ["Oral"],
+        "uses": "Zinc supplementation",
+        "solubility": "Soluble in water",
+        "dose_type": "Low to medium dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Potassium Chloride",
+        "class": "Electrolyte",
+        "forms": ["Extended-Release Tablet", "Oral Solution", "Injection"],
+        "routes": ["Oral", "Intravenous"],
+        "uses": "Potassium replacement",
+        "solubility": "Freely soluble in water",
+        "dose_type": "Medium to high dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Sodium Chloride",
+        "class": "Electrolyte",
+        "forms": ["Injection", "Nasal Solution", "Tablet"],
+        "routes": ["Intravenous", "Nasal", "Oral"],
+        "uses": "Electrolyte replacement and irrigation",
+        "solubility": "Freely soluble in water",
+        "dose_type": "Medium to high dose",
+        "stability": "Protect from contamination"
+    },
+    {
+        "name": "Insulin Human",
+        "class": "Antidiabetic Hormone",
+        "forms": ["Injection", "Cartridge"],
+        "routes": ["Subcutaneous", "Intravenous"],
+        "uses": "Diabetes",
+        "solubility": "Protein formulation",
+        "dose_type": "Biologic dose",
+        "stability": "Temperature controlled; avoid freezing"
+    },
+    {
+        "name": "Sildenafil",
+        "class": "PDE-5 Inhibitor",
+        "forms": ["Tablet", "Oral Suspension"],
+        "routes": ["Oral"],
+        "uses": "Selected cardiovascular and sexual health indications",
+        "solubility": "Slightly soluble depending on salt form",
+        "dose_type": "Low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Tamsulosin",
+        "class": "Alpha-1 Adrenergic Blocker",
+        "forms": ["Modified-Release Capsule"],
+        "routes": ["Oral"],
+        "uses": "Lower urinary tract symptoms",
+        "solubility": "Slightly soluble depending on salt form",
+        "dose_type": "Very low dose",
+        "stability": "Protect from moisture"
+    },
+    {
+        "name": "Finasteride",
+        "class": "5-Alpha Reductase Inhibitor",
+        "forms": ["Tablet"],
+        "routes": ["Oral"],
+        "uses": "Selected prostate and hair-loss indications",
+        "solubility": "Practically insoluble in water",
+        "dose_type": "Low dose",
+        "stability": "Protect from light and moisture"
     }
 ]
 
-# ============================================================
-# DEMO API DATABASE
-# ============================================================
 
-API_DATABASE = {
+# ----------------------------
+# Excipient roles
+# ----------------------------
 
-    "paracetamol": {
-        "name": "Paracetamol",
-        "mw": "151.16 g/mol",
-        "pka": "~9.5",
-        "logp": "~0.5",
-        "solubility": "Moderate aqueous solubility; temperature dependent",
-        "melting_point": "~169–170 °C",
-        "bcs": "Verify according to dose/solubility/permeability criteria",
-        "major_risks": [
-            "High dose can make dissolution and manufacturability important.",
-            "Particle size can influence powder behavior and dissolution.",
-            "Compressibility/tabletability should be characterized.",
-            "Thermal and processing stability should be considered."
-        ]
-    },
-
-    "ibuprofen": {
-        "name": "Ibuprofen",
-        "mw": "206.28 g/mol",
-        "pka": "~4.4",
-        "logp": "~3.5",
-        "solubility": "Low aqueous solubility; pH dependent",
-        "melting_point": "~75–78 °C",
-        "bcs": "Commonly discussed as BCS II / dissolution-limited context",
-        "major_risks": [
-            "Low aqueous solubility.",
-            "Weak-acid ionization makes pH important.",
-            "Dissolution enhancement may require investigation.",
-            "Particle size and solid-state properties may affect performance."
-        ]
-    }
+EXCIPIENTS = {
+    "Diluent": [
+        "Microcrystalline cellulose",
+        "Lactose monohydrate",
+        "Dicalcium phosphate",
+        "Mannitol",
+        "Calcium carbonate"
+    ],
+    "Binder": [
+        "Povidone",
+        "Pregelatinized starch",
+        "Hydroxypropyl cellulose",
+        "Hypromellose"
+    ],
+    "Disintegrant": [
+        "Croscarmellose sodium",
+        "Crospovidone",
+        "Sodium starch glycolate"
+    ],
+    "Lubricant": [
+        "Magnesium stearate",
+        "Stearic acid",
+        "Sodium stearyl fumarate"
+    ],
+    "Glidant": [
+        "Colloidal silicon dioxide",
+        "Talc"
+    ],
+    "Suspending agent": [
+        "Sodium carboxymethylcellulose",
+        "Xanthan gum",
+        "Methylcellulose"
+    ],
+    "Preservative": [
+        "Methylparaben",
+        "Propylparaben",
+        "Potassium sorbate",
+        "Sodium benzoate"
+    ],
+    "Vehicle": [
+        "Purified water",
+        "Glycerin",
+        "Propylene glycol",
+        "Polyethylene glycol"
+    ],
+    "Sweetener": [
+        "Sucrose",
+        "Sorbitol",
+        "Sucralose",
+        "Saccharin sodium"
+    ],
+    "Film former": [
+        "Hypromellose",
+        "Polyvinyl alcohol",
+        "Cellulose derivatives"
+    ],
+    "Topical base": [
+        "White soft paraffin",
+        "Liquid paraffin",
+        "Carbomer",
+        "Cetostearyl alcohol"
+    ],
+    "Sterile vehicle": [
+        "Water for Injection",
+        "Sodium chloride solution",
+        "Phosphate buffer"
+    ]
 }
-st.set_page_config(page_title="API Formulation Intelligence Pro", layout="wide")
 
-# ---------- DRUG DATABASE ----------
-DRUG_DATABASE = {
-    "Paracetamol": {
-        "api_profile": {
-            "Molecular Weight": "151.16 g/mol",
-            "BCS": "Class III",
-            "pKa": "9.5",
-            "LogP": "0.5"
-        },
-        "preformulation": [
-            "Solubility study",
-            "Particle size analysis",
-            "Flow properties",
-            "Compressibility",
-            "Compatibility study (FTIR, DSC)"
-        ],
-        "excipients": {
-            "Diluent": "Microcrystalline Cellulose",
-            "Binder": "PVP K30",
-            "Disintegrant": "Sodium Starch Glycolate",
-            "Lubricant": "Magnesium Stearate",
-            "Glidant": "Colloidal Silicon Dioxide"
-        },
-        "procedure": [
-            "API Weighing",
-            "Sieving",
-            "Pre-blending",
-            "Lubrication",
-            "Compression",
-            "Evaluation",
-            "Stability Study"
-        ],
-        "evaluation": [
-            "Hardness", "Friability", "Disintegration",
-            "Dissolution", "Assay", "Content Uniformity"
-        ],
-        "stability": ["Accelerated Stability", "Long-term Stability"],
-        "references": ["PMID:16806756", "PMID:37978101", "PMID:41408804"]
-    },
 
-    "Ibuprofen": {
-        "api_profile": {
-            "Molecular Weight": "206.28 g/mol",
-            "BCS": "Class II",
-            "pKa": "4.4",
-            "LogP": "3.5"
-        },
-        "preformulation": [
-            "Solubility vs pH",
-            "Particle Size",
-            "Compatibility"
-        ],
-        "excipients": {
-            "Diluent": "Lactose",
-            "Binder": "PVP K30",
-            "Disintegrant": "Crospovidone",
-            "Lubricant": "Magnesium Stearate",
-            "Glidant": "Aerosil"
-        },
-        "procedure": [
-            "API Characterization",
-            "Blending",
+# ----------------------------
+# Process and defect library
+# ----------------------------
+
+PROCESS_DATA = {
+    "Tablet": {
+        "process": [
+            "Dispensing and material verification",
+            "Sifting or milling where justified",
+            "Blending or granulation",
+            "Drying and moisture control where applicable",
+            "Final blending and lubrication",
             "Compression",
+            "Optional film coating",
+            "Packing and reconciliation"
+        ],
+        "defects": [
+            "Weight variation from poor powder flow",
+            "Capping or lamination from air entrapment or compression conditions",
+            "Sticking or picking from excess moisture or tooling issues",
+            "Chipping from weak granules or insufficient binding",
+            "Slow dissolution from over-lubrication or excessive hardness",
+            "Content-uniformity failure from segregation"
+        ],
+        "tests": [
+            "Appearance",
+            "Weight variation",
+            "Hardness",
+            "Friability",
+            "Disintegration",
             "Dissolution",
-            "Stability"
-        ],
-        "evaluation": [
-            "Hardness", "Dissolution", "Assay"
-        ],
-        "stability": ["Accelerated Stability"],
-        "references": ["PMID:23614647"]
+            "Assay",
+            "Content uniformity"
+        ]
     },
-
-    "Metformin": {
-        "api_profile": {
-            "Molecular Weight": "129.16 g/mol",
-            "BCS": "Class III",
-            "pKa": "12.4",
-            "LogP": "-1.4"
-        },
-        "preformulation": [
-            "Solubility Study",
-            "Particle Size",
-            "Flow Properties"
+    "Capsule": {
+        "process": [
+            "Dispensing and sieving",
+            "Powder blending or granulation",
+            "Flow and bulk-density evaluation",
+            "Capsule filling",
+            "Fill-weight checks",
+            "Visual inspection",
+            "Packing and reconciliation"
         ],
-        "excipients": {
-            "Diluent": "MCC",
-            "Binder": "PVP K30",
-            "Disintegrant": "Crospovidone",
-            "Lubricant": "Magnesium Stearate",
-            "Glidant": "Aerosil"
-        },
-        "procedure": [
-            "Weighing",
-            "Sieving",
-            "Blending",
-            "Compression",
-            "Evaluation",
-            "Stability"
+        "defects": [
+            "Fill-weight variation",
+            "Poor flow and machine blockage",
+            "Capsule body-cap separation",
+            "Powder leakage",
+            "Content-uniformity failure",
+            "Moisture-related brittleness or softening"
         ],
-        "evaluation": [
-            "Hardness", "Dissolution", "Assay"
-        ],
-        "stability": ["Accelerated Stability"],
-        "references": ["PMID:23783995"]
+        "tests": [
+            "Appearance",
+            "Fill-weight variation",
+            "Disintegration",
+            "Dissolution",
+            "Assay",
+            "Content uniformity",
+            "Moisture"
+        ]
     },
-
-    "Amlodipine": {
-        "api_profile": {
-            "Molecular Weight": "408.9 g/mol",
-            "BCS": "Class I",
-            "pKa": "8.6",
-            "LogP": "2.1"
-        },
-        "preformulation": [
-            "Compatibility Study",
-            "Particle Size",
-            "Flow Study"
+    "Liquid": {
+        "process": [
+            "Vehicle preparation",
+            "Dissolution or dispersion of ingredients",
+            "pH adjustment where required",
+            "Addition of sweetener, flavor and preservative",
+            "Volume make-up",
+            "Filtration or homogenization where justified",
+            "Filling and packing"
         ],
-        "excipients": {
-            "Diluent": "Lactose",
-            "Binder": "PVP",
-            "Disintegrant": "SSG",
-            "Lubricant": "Magnesium Stearate",
-            "Glidant": "Talc"
-        },
-        "procedure": [
-            "Weighing",
-            "Blending",
-            "Compression",
-            "Evaluation",
+        "defects": [
+            "Precipitation or crystallization",
+            "Incorrect pH",
+            "Microbial contamination",
+            "Viscosity variation",
+            "Sedimentation",
+            "Fill-volume variation",
+            "Color or flavor instability"
+        ],
+        "tests": [
+            "Appearance",
+            "pH",
+            "Viscosity",
+            "Specific gravity",
+            "Assay",
+            "Microbial limits",
+            "Fill volume",
             "Stability"
+        ]
+    },
+    "Suspension": {
+        "process": [
+            "Vehicle preparation",
+            "Wetting and dispersion of API",
+            "Particle-size control",
+            "Addition of suspending agents",
+            "Homogenization",
+            "pH and viscosity adjustment",
+            "Filling and packing"
         ],
-        "evaluation": [
-            "Hardness", "Dissolution", "Assay"
+        "defects": [
+            "Rapid sedimentation",
+            "Caking and poor redispersibility",
+            "Particle-size growth",
+            "Viscosity drift",
+            "Foaming",
+            "Microbial contamination",
+            "Dose non-uniformity"
         ],
-        "stability": ["Accelerated Stability"],
-        "references": ["PMID:19731558"]
+        "tests": [
+            "Appearance",
+            "pH",
+            "Viscosity",
+            "Particle-size distribution",
+            "Sedimentation volume",
+            "Redispersibility",
+            "Assay",
+            "Microbial limits"
+        ]
+    },
+    "Sterile": {
+        "process": [
+            "Raw-material and container verification",
+            "Solution or suspension preparation",
+            "pH and osmolality adjustment",
+            "Sterile filtration where applicable",
+            "Aseptic filling or validated terminal sterilization",
+            "Container closure",
+            "Visual inspection",
+            "Packaging and quarantine release"
+        ],
+        "defects": [
+            "Sterility failure",
+            "Bacterial endotoxin failure",
+            "Particulate contamination",
+            "pH or osmolality variation",
+            "Fill-volume variation",
+            "Container-closure leakage",
+            "Precipitation or loss of potency"
+        ],
+        "tests": [
+            "Appearance",
+            "pH",
+            "Assay",
+            "Sterility",
+            "Bacterial endotoxins",
+            "Particulate matter",
+            "Fill volume",
+            "Container-closure integrity"
+        ]
+    },
+    "Topical": {
+        "process": [
+            "Oil-phase or base preparation",
+            "Aqueous-phase preparation where applicable",
+            "API levigation, dissolution or dispersion",
+            "Emulsification or polymer hydration",
+            "Homogenization",
+            "Cooling and de-aeration",
+            "Filling and packing"
+        ],
+        "defects": [
+            "Phase separation",
+            "Creaming or cracking",
+            "Lumping or grittiness",
+            "Viscosity variation",
+            "Air entrapment",
+            "Microbial contamination",
+            "Non-uniform API distribution"
+        ],
+        "tests": [
+            "Appearance",
+            "Homogeneity",
+            "pH",
+            "Viscosity",
+            "Spreadability",
+            "Assay",
+            "Microbial limits",
+            "Stability"
+        ]
     }
-}#---------- UI ----------
-st.title("🧪 API Formulation Intelligence Pro")
-
-drug = st.selectbox("Select API", list(DRUG_DATABASE.keys()))
-
-if st.button("Analyze API"):
-    d = DRUG_DATABASE[drug]
-
-    st.header("1. API Profile")
-    st.json(d["api_profile"])
-
-    st.header("2. Preformulation Studies")
-    for item in d["preformulation"]:
-        st.write("•", item)
-
-    st.header("3. Excipients Used")
-    st.json(d["excipients"])
-
-    st.header("4. Manufacturing Procedure")
-    for i, step in enumerate(d["procedure"], 1):
-        st.write(f"{i}. {step}")
-
-    st.header("5. Evaluation Tests")
-    for t in d["evaluation"]:
-        st.write("•", t)
-
-    st.header("6. Stability Studies")
-    for s in d["stability"]:
-        st.write("•", s)
-
-    st.header("7. Literature References")
-    for r in d["references"]:
-        st.write("•", r)
-"Metformin": {
-    "api_profile":{"MW":"129.16 g/mol","BCS":"Class III","pKa":"12.4","LogP":"-1.4"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP K30","Disintegrant":"Crospovidone","Lubricant":"Magnesium Stearate","Glidant":"Aerosil"},
-    "procedure":["Weighing","Sieving","Blending","Compression","Evaluation","Stability"]
-},
-
-"Amlodipine": {
-    "api_profile":{"MW":"408.9 g/mol","BCS":"Class I","pKa":"8.6","LogP":"2.1"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Magnesium Stearate","Glidant":"Talc"},
-    "procedure":["Weighing","Blending","Compression","Evaluation","Stability"]
-},
-
-"Diclofenac Sodium": {
-    "api_profile":{"MW":"318.1 g/mol","BCS":"Class II","pKa":"4.0","LogP":"4.5"},
-    "excipients":{"Diluent":"MCC","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["API study","Blending","Compression","Dissolution","Stability"]
-},
-
-"Aspirin": {
-    "api_profile":{"MW":"180.16 g/mol","BCS":"Class I","pKa":"3.5","LogP":"1.2"},
-    "excipients":{"Diluent":"Starch","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
-    "procedure":["Weighing","Granulation","Drying","Compression","Evaluation"]
-},
-
-"Atorvastatin": {
-    "api_profile":{"MW":"558.6 g/mol","BCS":"Class II","pKa":"4.5","LogP":"6.3"},
-    "excipients":{"Diluent":"Lactose","Binder":"HPMC","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["API characterization","Wet granulation","Compression","Evaluation"]
-},
-
-"Rosuvastatin": {
-    "api_profile":{"MW":"481.5 g/mol","BCS":"Class III","pKa":"4.6","LogP":"0.1"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Aerosil"},
-    "procedure":["Blending","Compression","Evaluation","Stability"]
-},
-
-"Losartan": {
-    "api_profile":{"MW":"422.9 g/mol","BCS":"Class III","pKa":"4.0","LogP":"4.0"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Weighing","Blending","Compression","Evaluation"]
-},
-
-"Telmisartan": {
-    "api_profile":{"MW":"514.6 g/mol","BCS":"Class II","pKa":"4.5","LogP":"7.7"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Particle size reduction","Blending","Compression","Evaluation"]
-},
-
-"Valsartan": {
-    "api_profile":{"MW":"435.5 g/mol","BCS":"Class III","pKa":"4.9","LogP":"1.5"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Atenolol": {
-    "api_profile":{"MW":"266.3 g/mol","BCS":"Class III","pKa":"9.6","LogP":"0.2"},
-    "excipients":{"Diluent":"MCC","Binder":"Starch Paste","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
-    "procedure":["Granulation","Compression","Evaluation"]
-},
-
-"Propranolol": {
-    "api_profile":{"MW":"259.3 g/mol","BCS":"Class I","pKa":"9.5","LogP":"3.5"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Carvedilol": {
-    "api_profile":{"MW":"406.5 g/mol","BCS":"Class II","pKa":"7.8","LogP":"3.8"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Wet granulation","Compression","Evaluation"]
-},
-
-"Amoxicillin": {
-    "api_profile":{"MW":"365.4 g/mol","BCS":"Class III","pKa":"2.8","LogP":"-0.8"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Cefixime": {
-    "api_profile":{"MW":"453.5 g/mol","BCS":"Class IV","pKa":"2.5","LogP":"0.4"},
-    "excipients":{"Diluent":"Lactose","Binder":"HPMC","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Wet granulation","Compression","Evaluation"]
-},
-
-"Ciprofloxacin": {
-    "api_profile":{"MW":"331.3 g/mol","BCS":"Class III","pKa":"6.1","LogP":"0.3"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Azithromycin": {
-    "api_profile":{"MW":"749 g/mol","BCS":"Class III","pKa":"8.7","LogP":"4.0"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Granulation","Compression","Evaluation"]
-},
-
-"Doxycycline": {
-    "api_profile":{"MW":"444.4 g/mol","BCS":"Class I","pKa":"3.0","LogP":"-0.2"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Capsule filling","Evaluation"]
-},
-
-"Omeprazole": {
-    "api_profile":{"MW":"345.4 g/mol","BCS":"Class II","pKa":"4.0","LogP":"2.2"},
-    "excipients":{"Diluent":"Mannitol","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Pellet coating","Capsule filling","Evaluation"]
-},
-
-"Pantoprazole": {
-    "api_profile":{"MW":"383.4 g/mol","BCS":"Class III","pKa":"3.8","LogP":"2.0"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Enteric coating","Compression","Evaluation"]
-},
-
-"Rabeprazole": {
-    "api_profile":{"MW":"359.4 g/mol","BCS":"Class III","pKa":"5.0","LogP":"2.5"},
-    "excipients":{"Diluent":"Mannitol","Binder":"HPMC","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Enteric tablet","Evaluation"]
-},
-
-"Cetirizine": {
-    "api_profile":{"MW":"388.9 g/mol","BCS":"Class III","pKa":"2.2","LogP":"2.9"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Talc"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Levocetirizine": {
-    "api_profile":{"MW":"388.9 g/mol","BCS":"Class III","pKa":"2.1","LogP":"2.8"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Compression","Evaluation"]
-},
-
-"Loratadine": {
-    "api_profile":{"MW":"382.9 g/mol","BCS":"Class II","pKa":"5.0","LogP":"5.2"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Blending","Compression","Evaluation"]
-},
-
-"Fexofenadine": {
-    "api_profile":{"MW":"501.7 g/mol","BCS":"Class III","pKa":"4.3","LogP":"0.5"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Compression","Evaluation"]
-},
-
-"Salbutamol": {
-    "api_profile":{"MW":"239.3 g/mol","BCS":"Class I","pKa":"9.2","LogP":"1.3"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet preparation","Evaluation"]
-},
-
-"Theophylline": {
-    "api_profile":{"MW":"180.2 g/mol","BCS":"Class I","pKa":"8.6","LogP":"-0.1"},
-    "excipients":{"Diluent":"MCC","Binder":"HPMC","Disintegrant":"CCS","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["SR tablet formulation","Evaluation"]
-},
-
-"Montelukast": {
-    "api_profile":{"MW":"586.2 g/mol","BCS":"Class II","pKa":"5.7","LogP":"8.8"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Compression","Evaluation"]
-},
-
-"Fluconazole": {
-    "api_profile":{"MW":"306.3 g/mol","BCS":"Class I","pKa":"1.8","LogP":"0.5"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet formulation","Evaluation"]
-},
-
-"Ketoconazole": {
-    "api_profile":{"MW":"531.4 g/mol","BCS":"Class II","pKa":"6.5","LogP":"4.3"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet formulation","Evaluation"]
-},
-
-"Clotrimazole": {
-    "api_profile":{"MW":"344.8 g/mol","BCS":"Class II","pKa":"6.0","LogP":"6.1"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet/Cream formulation","Evaluation"]
-},
-
-"Albendazole": {
-    "api_profile":{"MW":"265.3 g/mol","BCS":"Class II","pKa":"2.8","LogP":"3.2"},
-    "excipients":{"Diluent":"Lactose","Binder":"PVP","Disintegrant":"Crospovidone","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet formulation","Evaluation"]
-},
-
-"Mebendazole": {
-    "api_profile":{"MW":"295.3 g/mol","BCS":"Class II","pKa":"3.0","LogP":"2.9"},
-    "excipients":{"Diluent":"MCC","Binder":"PVP","Disintegrant":"SSG","Lubricant":"Mg Stearate","Glidant":"Silica"},
-    "procedure":["Tablet formulation","Evaluation"]
 }
+# ----------------------------
+# Utility functions
+# ----------------------------
+
+def find_drug(name):
+    for item in DRUGS:
+        if item["name"] == name:
+            return item
+    return None
 
 
-# ============================================================
-# PUBMED SEARCH
-# ============================================================
+def clean_text(value):
+    if isinstance(value, list):
+        return " ".join(str(x) for x in value)
 
-def search_pubmed(api_name):
+    if value:
+        return str(value)
 
-    query = (
-        f'"{api_name}" AND '
-        f'(formulation OR preformulation OR solubility OR '
-        f'dissolution OR excipient OR tablet OR granulation)'
+    return "Not available"
+
+
+def get_process_type(form):
+    tablet_forms = [
+        "Tablet",
+        "Delayed-Release Tablet",
+        "Chewable Tablet",
+        "Extended-Release Tablet",
+        "Modified-Release Tablet",
+        "Orally Disintegrating Tablet",
+        "Sublingual Tablet",
+        "Vaginal Tablet",
+        "Granules",
+        "Lozenge"
+    ]
+
+    capsule_forms = [
+        "Capsule",
+        "Delayed-Release Capsule",
+        "Modified-Release Capsule"
+    ]
+
+    liquid_forms = [
+        "Syrup",
+        "Oral Solution",
+        "Oral Drops",
+        "Nasal Solution",
+        "Solution",
+        "Mouthwash",
+        "Gargle"
+    ]
+
+    suspension_forms = [
+        "Suspension",
+        "Oral Suspension",
+        "Nebulizer Suspension"
+    ]
+
+    sterile_forms = [
+        "Injection",
+        "Eye Drops"
+    ]
+
+    topical_forms = [
+        "Cream",
+        "Gel",
+        "Ointment",
+        "Lotion",
+        "Shampoo"
+    ]
+
+    if form in tablet_forms:
+        return "Tablet"
+
+    if form in capsule_forms:
+        return "Capsule"
+
+    if form in liquid_forms:
+        return "Liquid"
+
+    if form in suspension_forms:
+        return "Suspension"
+
+    if form in sterile_forms:
+        return "Sterile"
+
+    if form in topical_forms:
+        return "Topical"
+
+    return "Tablet"
+
+
+def get_daily_med_search_url(name):
+    return (
+        "https://dailymed.nlm.nih.gov/dailymed/search.cfm?"
+        "query=" + quote(name)
     )
 
-    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+
+def get_suggestions(drug, form):
+    result = {}
+
+    tablet_forms = [
+        "Tablet",
+        "Delayed-Release Tablet",
+        "Chewable Tablet",
+        "Extended-Release Tablet",
+        "Modified-Release Tablet",
+        "Orally Disintegrating Tablet",
+        "Sublingual Tablet",
+        "Vaginal Tablet"
+    ]
+
+    capsule_forms = [
+        "Capsule",
+        "Delayed-Release Capsule",
+        "Modified-Release Capsule"
+    ]
+
+    liquid_forms = [
+        "Syrup",
+        "Oral Solution",
+        "Suspension",
+        "Oral Suspension",
+        "Oral Drops",
+        "Nasal Solution",
+        "Solution",
+        "Mouthwash",
+        "Gargle"
+    ]
+
+    topical_forms = [
+        "Cream",
+        "Gel",
+        "Ointment",
+        "Lotion",
+        "Shampoo"
+    ]
+
+    sterile_forms = [
+        "Injection",
+        "Eye Drops"
+    ]
+
+    if form in tablet_forms:
+        result["Diluent"] = EXCIPIENTS["Diluent"]
+        result["Binder"] = EXCIPIENTS["Binder"]
+        result["Disintegrant"] = EXCIPIENTS["Disintegrant"]
+        result["Lubricant"] = EXCIPIENTS["Lubricant"]
+        result["Glidant"] = EXCIPIENTS["Glidant"]
+
+    if form in capsule_forms:
+        result["Capsule-fill diluent"] = EXCIPIENTS["Diluent"]
+        result["Binder or granulation aid"] = EXCIPIENTS["Binder"]
+        result["Glidant"] = EXCIPIENTS["Glidant"]
+        result["Lubricant"] = EXCIPIENTS["Lubricant"]
+
+    if form in liquid_forms:
+        result["Vehicle"] = EXCIPIENTS["Vehicle"]
+        result["Preservative"] = EXCIPIENTS["Preservative"]
+        result["Sweetener"] = EXCIPIENTS["Sweetener"]
+
+    if form in ["Suspension", "Oral Suspension"]:
+        result["Suspending agent"] = EXCIPIENTS["Suspending agent"]
+
+    if form in topical_forms:
+        result["Topical base"] = EXCIPIENTS["Topical base"]
+        result["Preservative"] = EXCIPIENTS["Preservative"]
+
+    if form in sterile_forms:
+        result["Sterile vehicle"] = EXCIPIENTS["Sterile vehicle"]
+
+    if "Practically insoluble" in drug["solubility"]:
+        result["Solubility-development topics"] = [
+            "Particle-size reduction",
+            "Surfactant screening",
+            "Cosolvent screening",
+            "Salt or pH screening",
+            "Solid-dispersion investigation"
+        ]
+
+    if "Very low dose" in drug["dose_type"]:
+        result["Low-dose control topics"] = [
+            "Content uniformity",
+            "Geometric dilution",
+            "Blend segregation study",
+            "Validated assay method"
+        ]
+
+    if "High dose" in drug["dose_type"]:
+        result["High-dose control topics"] = [
+            "Drug-loading capability",
+            "Blend uniformity",
+            "Powder flow",
+            "Dosage-form size"
+        ]
+
+    if "Acid sensitive" in drug["stability"]:
+        result["Protection topics"] = [
+            "Enteric protection development",
+            "Microenvironmental pH study",
+            "Moisture-protective packaging",
+            "Acid-stage dissolution evaluation"
+        ]
+
+    return result
+    # ----------------------------
+# Live public-data functions
+# ----------------------------
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_pubchem_data(name):
+    properties = (
+        "IUPACName,MolecularFormula,MolecularWeight,"
+        "CanonicalSMILES,IsomericSMILES,"
+        "HBondDonorCount,HBondAcceptorCount,"
+        "RotatableBondCount,XLogP,TPSA"
+    )
+
+    url = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
+        + quote(name)
+        + "/property/"
+        + properties
+        + "/JSON"
+    )
 
     try:
+        response = requests.get(url, timeout=25)
 
-        response = requests.get(
-            url,
-            params={
-                "db": "pubmed",
-                "term": query,
-                "retmode": "json",
-                "retmax": 15
-            },
-            timeout=15
-        )
+        if response.status_code != 200:
+            return {"Status": "No PubChem record found"}
 
-        response.raise_for_status()
+        item = response.json()["PropertyTable"]["Properties"][0]
 
-        ids = response.json()["esearchresult"]["idlist"]
+        return {
+            "PubChem CID": item.get("CID", "Not available"),
+            "IUPAC Name": item.get("IUPACName", "Not available"),
+            "Molecular Formula": item.get(
+                "MolecularFormula",
+                "Not available"
+            ),
+            "Molecular Weight": item.get(
+                "MolecularWeight",
+                "Not available"
+            ),
+            "Hydrogen Bond Donors": item.get(
+                "HBondDonorCount",
+                "Not available"
+            ),
+            "Hydrogen Bond Acceptors": item.get(
+                "HBondAcceptorCount",
+                "Not available"
+            ),
+            "Rotatable Bonds": item.get(
+                "RotatableBondCount",
+                "Not available"
+            ),
+            "XLogP": item.get("XLogP", "Not available"),
+            "TPSA": item.get("TPSA", "Not available"),
+            "Canonical SMILES": item.get(
+                "ConnectivitySMILES",
+                "Not available"
+            ),
+            "Isomeric SMILES": item.get(
+                "SMILES",
+                "Not available"
+            )
+        }
 
-        if not ids:
+    except Exception as error:
+        return {"Error": str(error)}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_openfda_data(name):
+    url = (
+        "https://api.fda.gov/drug/label.json?"
+        "search=openfda.generic_name:"
+        + quote(name.lower())
+        + "&limit=1"
+    )
+
+    try:
+        response = requests.get(url, timeout=25)
+
+        if response.status_code != 200:
+            return {"Status": "No matching openFDA label found"}
+
+        result = response.json()["results"][0]
+
+        return {
+            "Indications": clean_text(
+                result.get("indications_and_usage")
+            ),
+            "Warnings": clean_text(
+                result.get("warnings")
+            ),
+            "Dosage and Administration": clean_text(
+                result.get("dosage_and_administration")
+            ),
+            "Routes": clean_text(result.get("route")),
+            "Manufacturers": clean_text(
+                result.get("manufacturer_name")
+            ),
+            "OpenFDA Brand Names": clean_text(
+                result.get("openfda", {}).get("brand_name")
+            )
+        }
+
+    except Exception as error:
+        return {"Error": str(error)}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_dailymed_records(name):
+    url = (
+        "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?"
+        "drug_name=" + quote(name)
+    )
+
+    try:
+        response = requests.get(url, timeout=30)
+
+        if response.status_code != 200:
             return []
 
-        summary_url = (
-            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-            "esummary.fcgi"
-        )
+        data = response.json()
 
-        response2 = requests.get(
-            summary_url,
-            params={
-                "db": "pubmed",
-                "id": ",".join(ids),
-                "retmode": "json"
-            },
-            timeout=15
-        )
+        if isinstance(data, list):
+            return data
 
-        data = response2.json()["result"]
+        if isinstance(data, dict):
+            for key in ["data", "results", "spls"]:
+                if isinstance(data.get(key), list):
+                    return data[key]
 
-        papers = []
-
-        for pmid in ids:
-
-            item = data.get(pmid, {})
-
-            papers.append({
-                "title": item.get("title", ""),
-                "journal": item.get("fulljournalname", ""),
-                "date": item.get("pubdate", ""),
-                "pmid": pmid,
-                "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-            })
-
-        return papers
+        return []
 
     except Exception:
         return []
 
 
-# ============================================================
-# FORMULATION STRATEGIES
-# ============================================================
-
-STRATEGIES = {
-
-    "Tablet": {
-
-        "Direct Compression": [
-
-            "API identification and specification verification",
-
-            "Particle-size characterization",
-
-            "Sieve API and excipients where required",
-
-            "Assess powder flow",
-
-            "Assess bulk and tapped density",
-
-            "Calculate Carr's Index / Hausner Ratio",
-
-            "Perform API–excipient compatibility assessment",
-
-            "Prepare pre-blend",
-
-            "Add functional excipients according to formulation design",
-
-            "Assess blend uniformity",
-
-            "Add lubricant/glidant where justified",
-
-            "Final blending",
-
-            "Compression development",
-
-            "In-process checks",
-
-            "Tablet evaluation",
-
-            "Dissolution testing",
-
-            "Stability evaluation"
-        ],
-
-        "Wet Granulation": [
-
-            "API characterization",
-
-            "Excipient compatibility",
-
-            "Sieving",
-
-            "Dry blending",
-
-            "Prepare binder solution/suspension",
-
-            "Add granulating liquid under controlled conditions",
-
-            "Wet massing / granulation",
-
-            "Wet screening where applicable",
-
-            "Drying",
-
-            "Determine drying endpoint / moisture",
-
-            "Dry sizing",
-
-            "Final blending",
-
-            "Lubrication",
-
-            "Compression",
-
-            "In-process controls",
-
-            "Finished-tablet evaluation",
-
-            "Dissolution",
-
-            "Stability"
-        ],
-
-        "Dry Granulation": [
-
-            "API characterization",
-
-            "Excipient compatibility",
-
-            "Sieving",
-
-            "Pre-blending",
-
-            "Compaction / slugging or roller compaction",
-
-            "Granule sizing",
-
-            "Granule characterization",
-
-            "Final blending",
-
-            "Lubrication",
-
-            "Compression",
-
-            "Tablet evaluation",
-
-            "Dissolution",
-
-            "Stability"
-        ]
-    },
-
-    "Liquid": {
-
-        "Solution": [
-
-            "API identity and assay confirmation",
-
-            "Determine equilibrium solubility",
-
-            "Develop pH–solubility profile",
-
-            "Identify suitable vehicle system from literature",
-
-            "Evaluate pH and buffer compatibility",
-
-            "Evaluate cosolvent/solubilizer where justified",
-
-            "Prepare vehicle phase",
-
-            "Add API under controlled mixing",
-
-            "Confirm complete dissolution",
-
-            "Adjust pH where justified",
-
-            "Make up final volume",
-
-            "Filter if scientifically appropriate",
-
-            "Evaluate clarity",
-
-            "Assay",
-
-            "Related substances",
-
-            "pH",
-
-            "Microbial quality where applicable",
-
-            "Stability"
-        ],
-
-        "Suspension": [
-
-            "API particle-size characterization",
-
-            "Wetting study",
-
-            "Vehicle selection",
-
-            "Suspending-agent screening",
-
-            "Prepare vehicle",
-
-            "Hydrate/disperse polymer if applicable",
-
-            "Wetting / levigation of API",
-
-            "Controlled dispersion",
-
-            "Homogenization where appropriate",
-
-            "Make up final volume",
-
-            "Evaluate sedimentation",
-
-            "Evaluate redispersibility",
-
-            "Particle-size distribution",
-
-            "Assay",
-
-            "Microbial quality where applicable",
-
-            "Stability"
-        ]
-    },
-
-    "Topical": {
-
-        "Cream/Gel": [
-
-            "API characterization",
-
-            "Solubility in intended vehicle",
-
-            "API–excipient compatibility",
-
-            "Select oil/water or gel system",
-
-            "Prepare appropriate phase",
-
-            "API incorporation",
-
-            "Homogenization",
-
-            "pH adjustment where applicable",
-
-            "Viscosity evaluation",
-
-            "Spreadability",
-
-            "Content uniformity",
-
-            "In-vitro release/permeation where applicable",
-
-            "Microbial quality",
-
-            "Stability"
-        ]
-    }
-}
-
-
-# ============================================================
-# EXCIPIENT FUNCTIONS
-# ============================================================
-
-EXCIPIENTS = {
-
-    "Tablet": [
-        ("Diluent / filler",
-         "Provides bulk and can influence flow, compression and dissolution."),
-
-        ("Binder",
-         "Improves particle/granule cohesion where required."),
-
-        ("Disintegrant",
-         "Promotes tablet breakup and can influence dissolution."),
-
-        ("Lubricant",
-         "Reduces die-wall friction and supports tablet ejection."),
-
-        ("Glidant",
-         "Can improve powder flow where justified."),
-
-        ("Surfactant",
-         "May improve wetting/solubilization when evidence supports its use."),
-
-        ("Polymer",
-         "May be used for modified release or enabling technologies.")
-    ],
-
-    "Liquid": [
-        ("Vehicle",
-         "Provides the liquid medium for the API."),
-
-        ("Cosolvent",
-         "May improve apparent solubility where appropriate."),
-
-        ("Surfactant / solubilizer",
-         "May improve wetting or solubilization."),
-
-        ("Buffer / pH modifier",
-         "Controls pH where required for solubility or stability."),
-
-        ("Suspending agent",
-         "Provides physical stability in suspension systems."),
-
-        ("Preservative",
-         "May be required for suitable aqueous multidose systems.")
-    ]
-}
-
-
-# ============================================================
-# APP HEADER
-# ============================================================
-
-st.title("🧪 API → Formulation Intelligence")
-
-st.caption(
-    "Evidence-oriented formulation development research assistant"
+def normalize_dailymed_records(records):
+    rows = []
+
+    for item in records[:30]:
+        set_id = (
+            item.get("setid")
+            or item.get("setId")
+            or item.get("set_id")
+            or item.get("SETID")
+            or ""
+        )
+
+        title = (
+            item.get("title")
+            or item.get("drug_name")
+            or item.get("drugName")
+            or item.get("name")
+            or "DailyMed label"
+        )
+
+        manufacturer = (
+            item.get("labeler")
+            or item.get("manufacturer")
+            or item.get("companyName")
+            or "Not listed"
+        )
+
+        if set_id:
+            url = (
+                "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?"
+                "setid=" + quote(str(set_id))
+            )
+        else:
+            url = ""
+
+        rows.append(
+            {
+                "Product / label": title,
+                "Manufacturer": manufacturer,
+                "Set ID": set_id or "Not available",
+                "Label URL": url
+            }
+        )
+
+    return rows
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_dailymed_xml(set_id):
+    url = (
+        "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/"
+        + quote(str(set_id))
+        + ".xml"
+    )
+
+    try:
+        response = requests.get(url, timeout=35)
+
+        if response.status_code != 200:
+            return ""
+
+        return response.text
+
+    except Exception:
+        return ""
+
+
+def extract_inactive_ingredients(xml_text):
+    if not xml_text:
+        return []
+
+    soup = BeautifulSoup(xml_text, "xml")
+    ingredients = []
+
+    for element in soup.find_all(
+        string=re.compile(
+            "inactive ingredients",
+            re.IGNORECASE
+        )
+    ):
+        parent = element.parent
+
+        for node in parent.find_all_next(
+            ["ingredient", "ingredientSubstance"],
+            limit=100
+        ):
+            text = node.get_text(" ", strip=True)
+
+            if text and text not in ingredients:
+                ingredients.append(text)
+
+        if ingredients:
+            break
+
+    if ingredients:
+        return ingredients
+
+    full_text = soup.get_text(" ", strip=True)
+
+    match = re.search(
+        r"inactive ingredients(.{0,5000})",
+        full_text,
+        flags=re.IGNORECASE
+    )
+
+    if match:
+        raw = match.group(1)
+
+        parts = re.split(
+            r",|;||",
+            raw
+        )
+
+        return [
+            part.strip()
+            for part in parts
+            if len(part.strip()) > 2
+        ][:100]
+
+    return []
+    # ----------------------------
+# App header and sidebar
+# ----------------------------
+
+st.markdown(
+    """
+    <div class="hero">
+        <h1>💊 PharmaLens 100</h1>
+        <p>
+        API properties, dosage forms, product-label ingredients,
+        formulation development and manufacturing-risk dashboard.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
-st.info(
-    "Workflow: API → Properties → Preformulation → "
-    "Formulation Strategy → Detailed Procedure → Excipients → "
-    "Literature → Evaluation → Stability → Regulatory"
+st.markdown(
+    """
+    <div class="notice">
+    <b>Important:</b> This is an educational formulation-research app.
+    It is not a validated master formula, batch manufacturing record,
+    regulatory submission, prescription tool or medical advice system.
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
+st.sidebar.header("🔎 API search")
 
-# ============================================================
-# API INPUT
-# ============================================================
-
-st.header("1️⃣ Select API")
-
-api_name = st.text_input(
-    "Enter API name",
+search_text = st.sidebar.text_input(
+    "Search API",
     placeholder="Example: Paracetamol"
 )
 
-if st.button("Continue →", type="primary"):
+if search_text:
+    filtered = [
+        drug for drug in DRUGS
+        if search_text.lower() in drug["name"].lower()
+    ]
+else:
+    filtered = DRUGS
 
-    if api_name.strip():
+if not filtered:
+    st.error("API not found. Try another spelling.")
+    st.stop()
 
-        st.session_state["api"] = api_name.strip()
+selected_name = st.sidebar.selectbox(
+    "Select API",
+    [drug["name"] for drug in filtered]
+)
 
-        key = api_name.lower().strip()
+selected_drug = find_drug(selected_name)
 
-        if key in API_DATABASE:
-            st.session_state["profile"] = API_DATABASE[key]
-        else:
-            st.session_state["profile"] = {
-                "name": api_name,
-                "mw": "",
-                "pka": "",
-                "logp": "",
-                "solubility": "",
-                "melting_point": "",
-                "bcs": "",
-                "major_risks": [
-                    "No validated local profile available.",
-                    "Retrieve authoritative physicochemical data.",
-                    "Do not infer missing values."
-                ]
-            }
+selected_form = st.sidebar.selectbox(
+    "Select dosage form",
+    selected_drug["forms"]
+)
 
-
-# ============================================================
-# PROPERTY INTERFACE
-# ============================================================
-
-if "profile" in st.session_state:
-
-    p = st.session_state["profile"]
-
-    st.divider()
-
-    st.header("2️⃣ API Properties")
-
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-
-        mw = st.text_input(
-            "Molecular weight",
-            value=p.get("mw", "")
-        )
-
-        pka = st.text_input(
-            "pKa",
-            value=p.get("pka", "")
-        )
-
-    with c2:
-
-        logp = st.text_input(
-            "LogP / LogD",
-            value=p.get("logp", "")
-        )
-
-        solubility = st.text_input(
-            "Aqueous solubility",
-            value=p.get("solubility", "")
-        )
-
-    with c3:
-
-        melting = st.text_input(
-            "Melting point",
-            value=p.get("melting_point", "")
-        )
-
-        bcs = st.text_input(
-            "BCS classification",
-            value=p.get("bcs", "")
-        )
-
-    st.subheader("Additional API information")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        particle_size = st.text_input(
-            "Particle size / PSD"
-        )
-
-        polymorph = st.text_input(
-            "Polymorph / solid-state form"
-        )
-
-        hygroscopicity = st.text_input(
-            "Hygroscopicity"
-        )
-
-    with col2:
-
-        permeability = st.text_input(
-            "Permeability"
-        )
-
-        stability = st.text_area(
-            "Known stability / degradation information"
-        )
-
-        dose = st.text_input(
-            "Dose"
-        )
-
-    if st.button("Analyze Properties →", type="primary"):
-
-        st.session_state["properties_submitted"] = True
-
-        st.success(
-            "API properties submitted. Formulation analysis unlocked."
-        )
+st.sidebar.divider()
+st.sidebar.metric("APIs loaded", len(DRUGS))
+st.sidebar.caption(
+    "Exact inactive ingredients are read from a selected product label."
+)
 
 
-# ============================================================
-# MASTER ANALYSIS
-# ============================================================
+# ----------------------------
+# Dashboard metrics
+# ----------------------------
 
-if st.session_state.get("properties_submitted"):
+m1, m2, m3, m4 = st.columns(4)
 
-    st.divider()
+with m1:
+    st.metric("API", selected_drug["name"])
 
-    st.header(
-        f"3️⃣ Formulation Intelligence — "
-        f"{st.session_state['api']}"
+with m2:
+    st.metric("Class", selected_drug["class"])
+
+with m3:
+    st.metric("Market forms in dataset", len(selected_drug["forms"]))
+
+with m4:
+    st.metric("Selected form", selected_form)
+
+
+tabs = st.tabs(
+    [
+        "🧬 API profile",
+        "🌐 Live properties",
+        "🧪 Exact ingredients",
+        "🏭 Process defects",
+        "📋 Development notes"
+    ]
+)
+
+
+# ----------------------------
+# API profile
+# ----------------------------
+
+with tabs[0]:
+    st.subheader("API profile")
+
+    profile = pd.DataFrame(
+        [
+            ["API name", selected_drug["name"]],
+            ["Therapeutic class", selected_drug["class"]],
+            ["Common use", selected_drug["uses"]],
+            ["Solubility note", selected_drug["solubility"]],
+            ["Dose category", selected_drug["dose_type"]],
+            ["Stability note", selected_drug["stability"]],
+            ["Marketed dosage forms",
+             ", ".join(selected_drug["forms"])],
+            ["Routes",
+             ", ".join(selected_drug["routes"])]
+        ],
+        columns=["Property", "Information"]
     )
 
-    tabs = st.tabs([
-        "API Analysis",
-        "Preformulation",
-        "Dosage Form",
-        "Detailed Procedure",
-        "Excipients",
-        "Literature",
-        "Evaluation",
-        "Stability",
-        "Regulatory",
-        "Final Report"
-    ])
+    st.dataframe(
+        profile,
+        use_container_width=True,
+        hide_index=True
+    )
 
 
-    # ========================================================
-    # API ANALYSIS
-    # ========================================================
+# ----------------------------
+# Live PubChem/openFDA
+# ----------------------------
 
-    with tabs[0]:
+with tabs[1]:
+    st.subheader("Live public properties")
 
-        st.subheader("API profile")
+    if st.button(
+        "Fetch PubChem + openFDA data",
+        type="primary",
+        use_container_width=True
+    ):
+        with st.spinner("Fetching public data..."):
+            pubchem_data = get_pubchem_data(selected_name)
+            fda_data = get_openfda_data(selected_name)
 
-        p = st.session_state["profile"]
+        st.write("### PubChem chemical properties")
+        st.json(pubchem_data)
 
-        col1, col2, col3, col4 = st.columns(4)
+        st.write("### openFDA label information")
 
-        col1.metric("MW", p.get("mw") or "Research")
-        col2.metric("pKa", p.get("pka") or "Research")
-        col3.metric("LogP", p.get("logp") or "Research")
-        col4.metric("Melting point",
-                    p.get("melting_point") or "Research")
-
-        st.write(
-            "**Solubility:**",
-            p.get("solubility") or "Research required"
-        )
-
-        st.write(
-            "**BCS:**",
-            p.get("bcs") or "Verify from authoritative source"
-        )
-
-        st.subheader("Major formulation risks")
-
-        for risk in p["major_risks"]:
-            st.warning(risk)
+        if "Error" in fda_data or "Status" in fda_data:
+            st.warning(fda_data)
+        else:
+            for title, value in fda_data.items():
+                with st.expander(title):
+                    st.write(value)
 
 
-    # ========================================================
-    # PREFORMULATION
-    # ========================================================
+# ----------------------------
+# Exact label ingredients
+# ----------------------------
 
-    with tabs[1]:
+with tabs[2]:
+    st.subheader(
+        f"Product-specific ingredients: {selected_name}"
+    )
 
-        st.subheader("Preformulation investigation plan")
+    st.markdown(
+        """
+        <div class="success-box">
+        Exact inactive ingredients depend on product, strength,
+        manufacturer, country and dosage form. Select a specific DailyMed
+        label before treating any ingredient list as product-specific.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-        preformulation = [
+    st.link_button(
+        "🔗 Open DailyMed manual search",
+        get_daily_med_search_url(selected_name),
+        use_container_width=True
+    )
 
-            ("1. API identity",
-             "Confirm identity, purity, assay and API form."),
+    if st.button(
+        "Search current DailyMed records",
+        use_container_width=True
+    ):
+        with st.spinner("Searching DailyMed records..."):
+            records = get_dailymed_records(selected_name)
 
-            ("2. Solubility",
-             "Determine equilibrium solubility and, where relevant, "
-             "pH–solubility relationship."),
+        normalized = normalize_dailymed_records(records)
 
-            ("3. Particle size",
-             "Characterize PSD because it may influence flow, "
-             "surface area and dissolution."),
+        if normalized:
+            st.dataframe(
+                pd.DataFrame(normalized),
+                use_container_width=True,
+                hide_index=True
+            )
 
-            ("4. Flow properties",
-             "Assess bulk density, tapped density, angle of repose, "
-             "Carr Index and Hausner ratio where relevant."),
+            set_ids = [
+                row["Set ID"]
+                for row in normalized
+                if row["Set ID"] != "Not available"
+            ]
 
-            ("5. Compressibility",
-             "Investigate tabletability, compressibility and "
-             "compactibility for solid dosage forms."),
-
-            ("6. Solid state",
-             "Assess polymorphism/crystallinity using appropriate "
-             "solid-state techniques."),
-
-            ("7. Thermal behavior",
-             "Use thermal analysis where relevant to understand "
-             "processing and stability."),
-
-            ("8. Hygroscopicity",
-             "Determine moisture sensitivity where relevant."),
-
-            ("9. Stability",
-             "Investigate degradation pathways and sensitivity "
-             "to temperature, humidity, light, oxidation or hydrolysis."),
-
-            ("10. Compatibility",
-             "Screen API–excipient compatibility before final formulation.")
-        ]
-
-        for title, description in preformulation:
-
-            with st.expander(title):
-
-                st.write(description)
-
-                st.markdown(
-                    "**Output:** "
-                    "Record experimental result + method + "
-                    "acceptance/decision criterion + source."
+            if set_ids:
+                selected_set_id = st.selectbox(
+                    "Select a product Set ID",
+                    set_ids
                 )
 
-
-    # ========================================================
-    # DOSAGE FORM
-    # ========================================================
-
-    with tabs[2]:
-
-        st.subheader("Choose dosage form")
-
-        dosage_form = st.selectbox(
-            "Target dosage form",
-            [
-                "Tablet",
-                "Liquid",
-                "Topical"
-            ]
-        )
-
-        if dosage_form == "Tablet":
-
-            method = st.radio(
-                "Manufacturing approach",
-                [
-                    "Direct Compression",
-                    "Wet Granulation",
-                    "Dry Granulation"
-                ]
-            )
-
-            st.success(
-                f"Selected: Tablet → {method}"
-            )
-
-        elif dosage_form == "Liquid":
-
-            method = st.radio(
-                "Liquid approach",
-                [
-                    "Solution",
-                    "Suspension"
-                ]
-            )
-
-            st.success(
-                f"Selected: Liquid → {method}"
-            )
-
-        else:
-
-            method = "Cream/Gel"
-
-            st.success(
-                "Selected: Topical → Cream/Gel"
-            )
-
-        st.session_state["dosage_form"] = dosage_form
-        st.session_state["method"] = method
-
-
-    # ========================================================
-    # DETAILED PROCEDURE
-    # ========================================================
-
-    with tabs[3]:
-
-        st.subheader("🔬 Detailed development procedure")
-
-        dosage = st.session_state.get(
-            "dosage_form",
-            "Tablet"
-        )
-
-        method = st.session_state.get(
-            "method",
-            "Direct Compression"
-        )
-
-        if dosage in STRATEGIES:
-
-            if method in STRATEGIES[dosage]:
-
-                steps = STRATEGIES[dosage][method]
-
-                for i, step in enumerate(steps, 1):
-
-                    with st.expander(
-                        f"Step {i}: {step}"
-                    ):
-
-                        st.markdown(
-                            "**What to do / investigate**"
+                if st.button(
+                    "Read inactive ingredients from selected label"
+                ):
+                    with st.spinner("Reading selected SPL label..."):
+                        xml_text = get_dailymed_xml(
+                            selected_set_id
                         )
 
-                        st.write(
-                            "Define the material, equipment, "
-                            "process variable and expected output."
+                    ingredients = extract_inactive_ingredients(
+                        xml_text
+                    )
+
+                    if ingredients:
+                        ingredient_df = pd.DataFrame(
+                            {
+                                "Product-specific ingredient record":
+                                ingredients
+                            }
                         )
 
-                        st.markdown(
-                            "**What to record**"
+                        st.dataframe(
+                            ingredient_df,
+                            use_container_width=True,
+                            hide_index=True
                         )
 
-                        st.write(
-                            "Material identity • quantity • "
-                            "batch information • process condition • "
-                            "observation • analytical result"
+                        st.info(
+                            "Verify this list against the original "
+                            "DailyMed label before using it in any report."
                         )
-
-                        st.markdown(
-                            "**Evidence requirement**"
-                        )
-
-                        st.write(
-                            "Use API-specific research papers, "
-                            "validated development data, pharmacopeial "
-                            "methods or applicable regulatory guidance."
-                        )
-
+                    else:
                         st.warning(
-                            "Exact quantities, concentrations, "
-                            "temperatures and process times should be "
-                            "shown as 'reported values' only when "
-                             st.info(
-    "Exact quantities, concentrations, temperatures, mixing speeds, mixing times, sieve sizes and compression forces must be labelled as reported values only when supported by a verified research paper."
+                            "Automatic extraction failed. Open the "
+                            "original DailyMed label manually."
+                        )
+        else:
+            st.warning(
+                "No DailyMed API records were returned. Use the manual "
+                "search button above."
+            )
+
+    st.subheader(
+        "Role-based excipient development suggestions"
+    )
+
+    st.caption(
+        "The following are examples by function, not exact commercial "
+        "formula ingredients."
+    )
+
+    suggestions = get_suggestions(
+        selected_drug,
+        selected_form
+    )
+
+    rows = []
+
+    for role, items in suggestions.items():
+        rows.append(
+            {
+                "Role / development topic": role,
+                "Examples": ", ".join(items),
+                "Development note": (
+                    "Confirm grade, compatibility, concentration, "
+                    "safety, regulatory status and stability."
+                )
+            }
+        )
+
+    if rows:
+        st.dataframe(
+            pd.DataFrame(rows),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    st.link_button(
+        "🔗 FDA Inactive Ingredient Database",
+        "https://www.accessdata.fda.gov/scripts/cder/iig/index.cfm",
+        use_container_width=True
 )
+    # ----------------------------
+# Process and defects
+# ----------------------------
+
+with tabs[3]:
+    process_type = get_process_type(selected_form)
+    process = PROCESS_DATA[process_type]
+
+    st.subheader(
+        f"High-level manufacturing risk map: {selected_form}"
+    )
+
+    st.write("### Process stages")
+
+    for number, step in enumerate(process["process"], start=1):
+        st.write(f"{number}. {step}")
+
+    st.write("### Possible defects")
+
+    defect_rows = []
+
+    for defect in process["defects"]:
+        defect_rows.append(
+            {
+                "Possible defect": defect,
+                "Investigation focus": (
+                    "Review material attributes, equipment status, "
+                    "process parameters, IPC data, deviation history, "
+                    "cleaning and batch documentation."
+                )
+            }
+        )
+
+    st.dataframe(
+        pd.DataFrame(defect_rows),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.write("### Typical quality checks")
+
+    quality_df = pd.DataFrame(
+        {
+            "Quality check": process["tests"],
+            "Purpose": [
+                "Confirm dosage-form performance and consistency"
+                for _ in process["tests"]
+            ]
+        }
+    )
+
+    st.dataframe(
+        quality_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.warning(
+        "Actual production must follow approved specifications, "
+        "validated processes, GMP requirements, authorized SOPs and "
+        "approved batch records."
+    )
+
+
+# ----------------------------
+# Development notes
+# ----------------------------
+
+with tabs[4]:
+    st.subheader("Formulation-development checklist")
+
+    checklist = [
+        "Confirm API identity, assay, polymorph or salt form where relevant",
+        "Evaluate particle size, flow, density, moisture and compatibility",
+        "Select dosage form based on therapeutic need and product performance",
+        "Screen excipient compatibility and concentration ranges",
+        "Define critical quality attributes",
+        "Identify critical material attributes and process parameters",
+        "Perform stability and packaging studies",
+        "Define in-process controls and acceptance criteria",
+        "Investigate defects through documented root-cause analysis",
+        "Use CAPA and continued process verification after validation"
+    ]
+
+    for item in checklist:
+        st.checkbox(item, value=False)
+
+    st.markdown(
+        """
+        FDA process-validation guidance uses a lifecycle approach:
+        process design, process qualification and continued process
+        verification. [web:85]
+        """
+    )
+
+
+# ----------------------------
+# Footer
+# ----------------------------
+
+st.divider()
+
+st.caption(
+    "PharmaLens 100 | Educational research dashboard | "
+    "Always verify current product labels and regulatory requirements."
+                )
