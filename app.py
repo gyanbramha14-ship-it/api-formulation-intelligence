@@ -4,7 +4,6 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 import streamlit as st
-from bs4 import BeautifulSoup
 
 
 st.set_page_config(
